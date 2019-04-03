@@ -5,14 +5,14 @@ from setuptools import setup, find_packages
 import sys
 
 setup(
-    name="AirflowUtil",
+    name="airflow_util_dv",
     version="0.1.0",
     author="boxue liu",
     author_email="liu.boxue@detvista.com",
     license="Apache License",
     url="https://github.com/boxueliu/airflow_util",
-    packages=["AirflowUtil"],
-    install_requires=["cx_Oracle", "traceback2"],
+    packages=["airflow_util_dv"],
+    install_requires=["cx_Oracle <= 7.0.0 ", "traceback2 <= 1.4.0"],
     classifiers=[
         "Environment :: Web Environment",
         "Intended Audience :: Developers",

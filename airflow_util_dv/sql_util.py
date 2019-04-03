@@ -5,7 +5,6 @@ author: boxueliu
 version: 0.1.0
 description: airflow analysis sql and create file
 """
-import codecs
 import os
 import time
 import cx_Oracle
@@ -108,7 +107,7 @@ class AirflowUtil:
 
                     print(sql_.replace(';', ''))
                     cursor.execute(sql_.replace(';', ''))
-                    with codecs.open(os.path.join(data_path, file_name), 'w', 'gb18030') as f:
+                    with open(os.path.join(data_path, file_name), 'w', encoding='gb18030') as f:
                         while True:
                             data = cursor.fetchmany(1000)
                             if data:
@@ -122,3 +121,9 @@ class AirflowUtil:
                     pass
             except Exception as e:
                 print(e)
+
+
+if __name__ == '__main__':
+    a = AirflowUtil()
+
+    print(a.get_cut_time('RTL1', 'ODSB_ADMIN/admin@10.20.201.99/DDMUATDB'))
