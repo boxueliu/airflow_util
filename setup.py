@@ -6,13 +6,13 @@ import sys
 
 setup(
     name="airflowUtil",
-    version="0.1.0",
+    version="0.2.0",
     author="boxue liu",
     author_email="liu.boxue@detvista.com",
     license="Apache License",
     url="https://github.com/boxueliu/airflow_util",
     packages=["AirflowUtil"],
-    install_requires=["codecs", "cx_Oracle", "traceback2"],
+    install_requires=["cx_Oracle", "traceback2"],
     classifiers=[
         "Environment :: Web Environment",
         "Intended Audience :: Developers",
