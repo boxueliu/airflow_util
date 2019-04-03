@@ -10,7 +10,7 @@ setup(
     author="boxue liu",
     author_email="liu.boxue@detvista.com",
     license="Apache License",
-    url="https://github.com/cortexiphan1/JsonGet",
+    url="https://github.com/boxueliu/airflow_util",
     packages=["AirflowUtil"],
     install_requires=["codecs", "cx_Oracle", "traceback2"],
     classifiers=[
