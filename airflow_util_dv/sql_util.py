@@ -34,15 +34,14 @@ class AirflowUtil:
         :return:
         """
         try:
-            conenc = conn
-            conn = cx_Oracle.connect(conenc)
-            cursor = conn.cursor()
-            sql = "SELECT TO_CHAR(LAST_FIN_DAILY_DATE,'YYYY-MM-DD_HH:MI:SS')," \
-                  "TO_CHAR(THIS_FIN_DAILY_DATE,'YYYY-MM-DD_HH:MI:SS') " \
+            connnection = cx_Oracle.connect(conn)
+            cursor = connnection.cursor()
+            sql = "SELECT TO_CHAR(LAST_FIN_DAILY_DATE,'YYYY-MM-DD HH:MI:SS')," \
+                  "TO_CHAR(THIS_FIN_DAILY_DATE,'YYYY-MM-DD HH:MI:SS') " \
                   "FROM K_ODS.FIN_DAILY_TABLE   WHERE TASK_ID = '%s'  AND EFF_FLAG = '1'" \
                   % str(taskid)
             cursor.execute(sql)
-            conn.commit()
+            connnection.commit()
             data = cursor.fetchall()
             return data[0][0], data[0][1]
         except Exception as e:
@@ -53,6 +52,8 @@ class AirflowUtil:
         to analysis sql file and create csv file to export data
         :param kwargs:
         :return: csv file
+        dataype must be attentionai
+        SAP,RTL,ODSB,ODSB_CBB,WHS,CFL
         """
         spool_path = kwargs['spool_path']
         data_path = kwargs['data_path']
@@ -71,59 +72,71 @@ class AirflowUtil:
         """     
             to analysis sql
         """
+        sql_ = ''
+        file_name = ''
         for file_ in os.listdir(spool_path):
             try:
                 if file_ == sql_name:
-                    with open(os.path.join(spool_path, file_), 'r') as fp:
-                        spool_source = fp.readlines()
-                        file_flag = 0
-                        sql_flag = 0
-                        file_name = ''
-                        sql_ = ''
-                        for line_ in spool_source:
-                            if (line_.find('spool ') >= 0) & (line_.find('set ') < 0) & (file_flag == 0):
-                                # find file path
-                                file_flag = 1
-                                try:
-                                    file_name = line_.replace('\n', '').split(' ')[1].split('/')[-1].replace("'", '')
-                                except Exception:
-                                    print('spool not formatted!')
-                                    print(line_)
-                                    print(traceback.format_exc())
-                            elif (line_.upper().find('SELECT') >= 0) & (file_flag == 1) & (sql_flag == 0):
-                                sql_flag = 1
-                                sql_ += line_
-                            elif line_.strip().find('spool off;') == 0:
-                                sql_flag = 0
-                            elif line_.strip().find('quit;') == 0:
-                                sql_flag = 0
-                            elif sql_flag == 1:
-                                sql_ += line_
+                    if data_type == 'ODSB_CBB':
+                        with open(os.path.join(spool_path, file_), 'r') as fp:
+                            for line in fp.readlines():
+                                sql_ += line
+                    else:
+                        with open(os.path.join(spool_path, file_), 'r') as fp:
+                            spool_source = fp.readlines()
+                            file_flag = 0
+                            sql_flag = 0
+                            file_name = ''
+                            sql_ = ''
+                            for line_ in spool_source:
+                                if (line_.find('spool ') >= 0) & (line_.find('set ') < 0) & (file_flag == 0):
+                                    # find file path
+                                    file_flag = 1
+                                    try:
+                                        file_name = line_.replace('\n', '').split(' ')[1].split('/')[-1].replace("'", '')
+                                    except Exception:
+                                        print('spool not formatted!')
+                                        print(line_)
+                                        print(traceback.format_exc())
+                                elif (line_.upper().find('SELECT') >= 0) & (file_flag == 1) & (sql_flag == 0):
+                                    sql_flag = 1
+                                    sql_ += line_
+                                elif line_.strip().find('spool off;') == 0:
+                                    sql_flag = 0
+                                elif line_.strip().find('quit;') == 0:
+                                    sql_flag = 0
+                                elif sql_flag == 1:
+                                    sql_ += line_
 
-                    if sql_.find('&2') != -1:
-                        sql_ = sql_.replace('&2', daily_start_time)
-                    if sql_.find('&3') != -1:
-                        sql_ = sql_.replace('&3', daily_end_time)
+                        if sql_.find('&2') != -1:
+                            sql_ = sql_.replace('&2', daily_start_time)
+                        if sql_.find('&3') != -1:
+                            sql_ = sql_.replace('&3', daily_end_time)
 
                     print(sql_.replace(';', ''))
                     cursor.execute(sql_.replace(';', ''))
-                    with open(os.path.join(data_path, file_name), 'w', encoding='gb18030') as f:
-                        while True:
-                            data = cursor.fetchmany(1000)
-                            if data:
-                                for x in data:
-                                    f.write(x[0])
-                                    f.write('\n')
-                            else:
-                                break
-                    cursor.close()
+                    if data_type == "ODSB_CBB":
+                        with open(os.path.join(data_path, file_.replace('.sql', '.csv')), 'w', encoding='utf8') as f:
+                            while True:
+                                data = cursor.fetchmany(1000)
+                                if data:
+                                    for x in data:
+                                        f.write(x[0])
+                                        f.write('\n')
+                                else:
+                                    break
+                    else:
+                        with open(os.path.join(data_path, file_name), 'w', encoding='gb18030') as f:
+                            while True:
+                                data = cursor.fetchmany(1000)
+                                if data:
+                                    for x in data:
+                                        f.write(x[0])
+                                        f.write('\n')
+                                else:
+                                    break
+                        cursor.close()
                 else:
                     pass
             except Exception as e:
                 print(e)
-
-
-if __name__ == '__main__':
-    a = AirflowUtil()
-
-    print(a.get_cut_time('RTL1', 'ODSB_ADMIN/admin@10.20.201.99/DDMUATDB'))

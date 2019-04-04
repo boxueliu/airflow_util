@@ -253,14 +253,17 @@ class FileOracleOperator(BaseOperator):
             parameters=self.parameters)
 
 
-def return_sql(sql_name):
+def return_sql(sql_path, sql_name, need_chinese=True):
     r"""
-    analysis sql file and return sql list
+    return sql list
+    :param sql_path:
     :param sql_name:
+    :param need_chinese:
     :return:
     """
+
     sql_file_name = sql_name
-    sql_file_path = os.path.join(sql_file_name)
+    sql_file_path = os.path.join(sql_path, sql_file_name)
 
     try:
         fpo = open(sql_file_path, 'r', encoding='utf-8')
@@ -276,6 +279,7 @@ def return_sql(sql_name):
         else:
             pass
     output_string = ''
+
     try:
         for ele in sql_string:
             output_string += ele.replace('\n', ' ')
@@ -284,14 +288,15 @@ def return_sql(sql_name):
     finally:
         fpo.close()
 
-    #将sql中的中文替换成''
-    english_list = re.sub(r'[\u4e00-\u9fa5]','',output_string)
-    #将sql中的中文字符替换成''
-    english_list1 = re.sub(r'[^\x00-\x7f]','',english_list)
+    if not need_chinese:
+        # 将sql中的中文替换成''
+        output_string = re.sub(r'[\u4e00-\u9fa5]', '', output_string)
+        # 将sql中的中文字符替换成''
+        output_string = re.sub(r'[^\x00-\x7f]', '', output_string)
 
-    list = english_list1.split(";")
-    for i in list:
+    list_ = output_string.split(";")
+    for i in list_:
         if i.strip() == '':
-            list.remove(i)
+            list_.remove(i)
 
-    return list
+    return list_
