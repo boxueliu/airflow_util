@@ -5,6 +5,7 @@ author: boxueliu
 version: 0.1.0
 description: airflow analysis sql and create file
 """
+import datetime
 import os
 import time
 import cx_Oracle
@@ -16,15 +17,18 @@ class AirflowUtil:
     def __init__(self):
         self.flag = ''
 
-    def flag_creat(self, file_path):
+    def flag_creat(self, **kwargs):
+        file_path = kwargs['file_path']
+        file_suffix = datetime.datetime.now().strftime('%Y%m%d')
         r"""
          cbb system to create success file flag
         :param file_path:
         :return:
         """
-        flag_name = 'complete.log'
+        flag_name = 'interface_' + file_suffix + '.flag'
         with open(os.path.join(file_path, flag_name), 'w') as file:
-            file.write('batch complete in %s' % time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+            # file.write('batch complete in %s' % time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+            file.write('')
 
     def get_cut_time(self, taskid, conn):
         r"""
@@ -65,7 +69,12 @@ class AirflowUtil:
         """
             get daily time
         """
-        daily_start_time, daily_end_time = self.get_cut_time(data_type, daily_conn)
+        daily_start_time = ''
+        daily_end_time = ''
+        if data_type == 'ODSB_CBB':
+            pass
+        else:
+            daily_start_time, daily_end_time = self.get_cut_time(data_type, daily_conn)
         connect = cx_Oracle.connect(conn, encoding='gb18030')
         cursor = connect.cursor()
 

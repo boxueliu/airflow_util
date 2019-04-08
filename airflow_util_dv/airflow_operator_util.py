@@ -244,7 +244,7 @@ class FileOracleOperator(BaseOperator):
         self.parameters = parameters
 
     def execute(self, context):
-        self.sql = return_sql(self.sql_file)
+        self.sql = return_sql( self.sql_file)
         self.log.info('Executing: %s', self.sql)
         hook = OracleHook(oracle_conn_id=self.oracle_conn_id)
         hook.run(
@@ -253,7 +253,7 @@ class FileOracleOperator(BaseOperator):
             parameters=self.parameters)
 
 
-def return_sql(sql_path, sql_name, need_chinese=True):
+def return_sql(sql_name, need_chinese=True):
     r"""
     return sql list
     :param sql_path:
@@ -263,7 +263,7 @@ def return_sql(sql_path, sql_name, need_chinese=True):
     """
 
     sql_file_name = sql_name
-    sql_file_path = os.path.join(sql_path, sql_file_name)
+    sql_file_path = os.path.join(sql_file_name)
 
     try:
         fpo = open(sql_file_path, 'r', encoding='utf-8')
