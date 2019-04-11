@@ -123,7 +123,10 @@ class AirflowUtil:
                             sql_ = sql_.replace('&3', daily_end_time)
 
                     print(sql_.replace(';', ''))
-                    cursor.execute(sql_.replace(';', ''))
+                    try:
+                        cursor.execute(sql_.replace(';', ''))
+                    except Exception as ee:
+                        print(ee)
                     if data_type == "ODSB_CBB":
                         with open(os.path.join(data_path, file_.replace('.sql', '.csv')), 'w', encoding='utf8') as f:
                             while True:
@@ -145,7 +148,5 @@ class AirflowUtil:
                                 else:
                                     break
                         cursor.close()
-                else:
-                    pass
             except Exception as e:
-                print(e)
+                raise RuntimeError(e)
