@@ -38,16 +38,19 @@ class AirflowUtil:
         :return:
         """
         try:
-            connnection = cx_Oracle.connect(conn)
-            cursor = connnection.cursor()
-            sql = "SELECT TO_CHAR(LAST_FIN_DAILY_DATE,'YYYY-MM-DD HH:MI:SS')," \
-                  "TO_CHAR(THIS_FIN_DAILY_DATE,'YYYY-MM-DD HH:MI:SS') " \
-                  "FROM K_ODS.FIN_DAILY_TABLE   WHERE TASK_ID = '%s'  AND EFF_FLAG = '1'" \
-                  % str(taskid)
-            cursor.execute(sql)
-            connnection.commit()
-            data = cursor.fetchall()
-            return data[0][0], data[0][1]
+            if conn == '':
+                return '1900-01-01 10:00:00', '2099-12-12 10:00:00'
+            else:
+                connnection = cx_Oracle.connect(conn)
+                cursor = connnection.cursor()
+                sql = "SELECT TO_CHAR(LAST_FIN_DAILY_DATE,'YYYY-MM-DD HH:MI:SS')," \
+                      "TO_CHAR(THIS_FIN_DAILY_DATE,'YYYY-MM-DD HH:MI:SS') " \
+                      "FROM K_ODS.FIN_DAILY_TABLE   WHERE TASK_ID = '%s'  AND EFF_FLAG = '1'" \
+                      % str(taskid)
+                cursor.execute(sql)
+                connnection.commit()
+                data = cursor.fetchall()
+                return data[0][0], data[0][1]
         except Exception as e:
             print(e)
 
