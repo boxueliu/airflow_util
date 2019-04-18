@@ -7,6 +7,8 @@ import datetime
 from time import strftime, localtime
 from configparser import ConfigParser
 import re
+from deprecated import deprecated
+import traceback
 
 
 conf = ConfigParser()
@@ -119,6 +121,7 @@ def is_monthend():
         return "not_month_end"
 
 
+@deprecated(version='1.2.5', reason="Return Sql is too big, use modify_sql in later version.")
 def return_sql(sql_path, sql_name, need_chinese=True):
     r"""
     return sql list
@@ -166,3 +169,68 @@ def return_sql(sql_path, sql_name, need_chinese=True):
             list_.remove(i)
 
     return list_
+
+
+def modify_sql(fpo, need_chinese=True):
+    remark1 = '/*'
+    len_r1 = 2
+    remark2 = '*/'
+    len_r2 = 2
+    remark3 = '--'
+    len_r3 = 2
+    output_string = ''
+    try:
+        _sqls = fpo.readlines()
+    except Exception:
+        print('Modify sql error! file pointer cannot be used!')
+        print(traceback.format_exc())
+        raise Exception
+
+    stack_ = []
+    for _sql in _sqls:
+        st_remark1 = st_remark2 = st_remark3 = -1
+        if _sql.find(remark3) >= 0:
+            st_remark3 = _sql.find(remark3)
+            stack_.append(3)
+        if _sql.find(remark1) >= 0:
+            st_remark1 = _sql.find(remark1)
+            stack_.append(1)
+        if _sql.find(remark2) >= 0:
+            st_remark2 = _sql.find(remark2)
+            stack_.append(2)
+
+        if len(stack_) == 0:
+            output_string += _sql
+        elif st_remark1 >= 0:
+            if st_remark2 >= 0:
+                output_string += _sql[:st_remark1] + _sql[st_remark2 + len_r1:]
+            else:
+                output_string += _sql[:st_remark1]
+        elif st_remark2 >= 0:
+            output_string += _sql[st_remark2 + len_r1:]
+        elif st_remark3 >= 0:
+            output_string += _sql[:st_remark3]
+        else:
+            continue
+
+        if st_remark2 >= 0:
+            stack_.pop()
+            if stack_.count(1) > stack_.count(2):
+                stack_.pop()
+        if st_remark3 >= 0:
+            stack_.pop()
+
+    output_string.replace('\n', ' ')
+
+    if not need_chinese:
+        # 将sql中的中文替换成''
+        output_string = re.sub(r'[\u4e00-\u9fa5]', '', output_string)
+        # 将sql中的中文字符替换成''
+        output_string = re.sub(r'[^\x00-\x7f]', '', output_string)
+
+    for i in output_string.split(";"):
+        if i.strip() == '':
+            pass
+        else:
+            yield i
+
