@@ -1,4 +1,3 @@
-
 # -*- coding:UTF-8 -*-
 r"""
 author: boxueliu
@@ -12,6 +11,8 @@ import time
 import MySQLdb
 import cx_Oracle
 import traceback2 as traceback
+
+
 # import MySQLdb
 
 
@@ -47,7 +48,8 @@ class AirflowUtil:
                 cursor = connnection.cursor()
                 sql = "SELECT TO_CHAR(LAST_FIN_DAILY_DATE,'YYYY-MM-DD HH24:MI:SS')," \
                       "TO_CHAR(THIS_FIN_DAILY_DATE,'YYYY-MM-DD HH24:MI:SS') " \
-                      "FROM K_ODS.FIN_DAILY_TABLE   WHERE SYSTEM_ID = '%s'  AND TASK_ID = '%s'   AND EFF_FLAG = '1'" \
+                      "FROM K_ODS.FIN_DAILY_TABLE  " \
+                      " WHERE SYSTEM_ID = '%s'  AND TASK_ID = '%s'   AND EFF_FLAG = '1'" \
                       % (str(system_type), str(taskid))
                 cursor.execute(sql)
                 connnection.commit()
@@ -91,6 +93,8 @@ class AirflowUtil:
             daily_start_time, daily_end_time = self.get_cut_time(system_type, data_type, daily_conn)
 
         cursor = connect.cursor()
+        cursor1 = cursor
+        sql_prefix = ''
 
         """     
             to analysis sql
@@ -98,10 +102,11 @@ class AirflowUtil:
         for file_ in os.listdir(spool_path):
             data_from = 0
             data_to = 0
+            notes_ = 0
             try:
                 if file_ == sql_name:
 
-                    sql_dic = self.sql_parse(spool_path+sql_name)
+                    sql_dic = self.sql_parse(spool_path + sql_name)
                     sql_ = sql_dic['sql']
                     file_name = sql_dic['file'].replace('\n', '')
 
@@ -109,41 +114,40 @@ class AirflowUtil:
                         sql_ = sql_.replace('&2', daily_start_time)
                     if sql_.find('&3') != -1:
                         sql_ = sql_.replace('&3', daily_end_time)
+                    sql_ = sql_.replace(';', '').upper()
+                    count_sql = sql_.replace(sql_[sql_.index('SELECT') + 6:sql_.index('FROM')], '  count(1) ')
 
-                    if database != 'MYSQL':
-                        sql_ = sql_.replace(';', '')
-                    print(sql_)
                     try:
-                        cursor.execute(sql_)
+                        cursor1.execute(count_sql)
+                        notes_ = cursor1.fetchall()[0][0]
+                        print("上游数据总条数为：" + str(notes_) + " 条")
                     except Exception as ee:
                         print(ee)
 
                     if data_type == "ODSB_CBB":
-                        with open(os.path.join(data_path, file_name), 'w', encoding='utf8') as f:
-                            while True:
-                                data = cursor.fetchmany(1000)
-                                data_from += len(data)
-                                if data:
-                                    for x in data:
-                                        f.write(x[0])
-                                        f.write('\n')
-                                        data_to += 1
-                                else:
-                                    break
+                        f = open(os.path.join(data_path, file_name), 'w', encoding='utf8')
                     else:
-                        with open(os.path.join(data_path, file_name), 'w', encoding='gb18030') as f:
-                            while True:
-                                data = cursor.fetchmany(1000)
-                                data_from += len(data)
-                                if data:
-                                    for x in data:
-                                        f.write(str(x[0]))
-                                        f.write('\n')
-                                        data_to += 1
-                                else:
-                                    break
-                        cursor.close()
-                    print('==========从上游抽数该表 ' + file_name[:file_name.find('.csv')] + ' 获得数据为：' + str(data_from) + ' 条 ===============')
+                        f = open(os.path.join(data_path, file_name), 'w', encoding='gb18030')
+                    while data_from < notes_:
+                        if database == 'MYSQL':
+                            sql_prefix = ' limit %s, 1000000 ' % str(data_from)
+                        _sql = sql_ + sql_prefix
+                        print(_sql)
+                        cursor.execute(_sql)
+                        while True:
+                            data = cursor.fetchmany(1000)
+                            data_from += len(data)
+                            if data:
+                                for x in data:
+                                    f.write(x[0])
+                                    f.write('\n')
+                                    data_to += 1
+                            else:
+                                break
+                    f.close()
+                    cursor.close()
+                    print('==========从上游抽数该表 ' + file_name[:file_name.find('.csv')] +
+                          ' 获得数据为：' + str(data_from) + ' 条 ===============')
                     print('==========落成文件 ' + file_name + ' 的数据条数：' + str(data_to) + ' 条 =================')
 
                     sql_retail = "SELECT COUNT(1) FROM "
@@ -154,7 +158,7 @@ class AirflowUtil:
                     else:
                         schema = 'K_ODS'
 
-                    sql = sql_retail + schema+'.'+file_name[:file_name.find('.csv')]
+                    sql = sql_retail + schema + '.' + file_name[:file_name.find('.csv')]
                     data_list = []
                     try:
                         ods_cursor = cx_Oracle.connect(ods_conn).cursor()
@@ -166,7 +170,7 @@ class AirflowUtil:
                     if data_list:
                         summary = data_list[0][0]
 
-                    print('==============导入ods查询该表有 '+str(summary) + ' 条====================')
+                    print('==============导入ods查询该表有 ' + str(summary) + ' 条====================')
 
             except Exception as e:
                 raise RuntimeError(e)
@@ -175,18 +179,18 @@ class AirflowUtil:
         r"""
         mysql connect
         :param conn:
-        :retur'ODSB_ADMIN/admin@10.20.201.99/DDMUATDB'n:
+        :return:
         """
         user = conn[:str(conn).find('/')]
-        pwd = conn[str(conn).find('/')+1:str(conn).find('@')]
+        pwd = conn[str(conn).find('/') + 1:str(conn).find('@')]
 
         if conn.find(':') >= 0:
-            host = conn[str(conn).find('@')+1:str(conn).find(':')]
-            port = int(conn[str(conn).find(':')+1:str(conn).rfind('/')])
+            host = conn[str(conn).find('@') + 1:str(conn).find(':')]
+            port = int(conn[str(conn).find(':') + 1:str(conn).rfind('/')])
         else:
-            host = conn[str(conn).find('@')+1:str(conn).rfind('/')]
+            host = conn[str(conn).find('@') + 1:str(conn).rfind('/')]
             port = 3306
-        db = conn[str(conn).rfind('/')+1:]
+        db = conn[str(conn).rfind('/') + 1:]
         conn = MySQLdb.connect(host, user, pwd, db, port, charset='utf8')
         return conn
 
@@ -214,4 +218,3 @@ class AirflowUtil:
                 elif _sql == 1:
                     _sql_str += line
         return {"file": _file_str, "sql": _sql_str}
-
