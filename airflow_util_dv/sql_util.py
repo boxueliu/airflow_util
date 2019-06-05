@@ -114,7 +114,7 @@ class AirflowUtil:
                         sql_ = sql_.replace('&2', daily_start_time)
                     if sql_.find('&3') != -1:
                         sql_ = sql_.replace('&3', daily_end_time)
-                    sql_ = sql_.replace(';', '').upper()
+                    sql_ = sql_.replace(';', '').replace('select', 'SELECT').replace('from', 'FROM')
                     count_sql = sql_.replace(sql_[sql_.index('SELECT') + 6:sql_.index('FROM')], '  count(1) ')
 
                     try:
@@ -146,6 +146,7 @@ class AirflowUtil:
                                 break
                     f.close()
                     cursor.close()
+
                     print('==========从上游抽数该表 ' + file_name[:file_name.find('.csv')] +
                           ' 获得数据为：' + str(data_from) + ' 条 ===============')
                     print('==========落成文件 ' + file_name + ' 的数据条数：' + str(data_to) + ' 条 =================')

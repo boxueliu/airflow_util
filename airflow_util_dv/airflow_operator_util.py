@@ -1,4 +1,6 @@
+import pipes
 import signal
+import subprocess
 from subprocess import Popen, STDOUT, PIPE
 from tempfile import gettempdir, NamedTemporaryFile
 
@@ -11,10 +13,11 @@ import os
 from airflow.utils.decorators import apply_defaults
 from airflow.hooks.oracle_hook import OracleHook
 from airflow.models import BaseOperator
+from airflow.operators.sensors import BaseSensorOperator
 import re
 os.environ['NLS_LANG'] = 'SIMPLIFIED CHINESE_CHINA.UTF8'
-
-path_flag = '/home/dmpapp/etl'
+home = os.path.dirname(os.path.realpath(__file__))
+path_flag = home
 
 
 class OracleOperator(BaseOperator):
@@ -200,6 +203,7 @@ class BashOperator(BaseOperator):
                 if self.xcom_push_flag:
                     return line
             except Exception as e:
+                self.log.info("exec throw a exception " + str(e))
                 with open(str(path_flag+self.flag+".txt"), mode='a', encoding='utf-8') as f:
                     f.write(self.flag + " " + str(self.task_name) + " run failed !!!!!\n")
                     f.write("error is " + str(e) + "\n")
@@ -244,13 +248,16 @@ class FileOracleOperator(BaseOperator):
         self.parameters = parameters
 
     def execute(self, context):
-        self.sql = return_sql( self.sql_file)
-        self.log.info('Executing: %s', self.sql)
-        hook = OracleHook(oracle_conn_id=self.oracle_conn_id)
-        hook.run(
-            self.sql,
-            autocommit=self.autocommit,
-            parameters=self.parameters)
+        try:
+            self.sql = return_sql(self.sql_file)
+            self.log.info('Executing: %s', self.sql)
+            hook = OracleHook(oracle_conn_id=self.oracle_conn_id)
+            hook.run(
+                self.sql,
+                autocommit=self.autocommit,
+                parameters=self.parameters)
+        except Exception as e:
+            raise e
 
 
 def return_sql(sql_name, need_chinese=True):
@@ -261,42 +268,46 @@ def return_sql(sql_name, need_chinese=True):
     :param need_chinese:
     :return:
     """
-
-    sql_file_name = sql_name
-    sql_file_path = os.path.join(sql_file_name)
-
     try:
-        fpo = open(sql_file_path, 'r', encoding='utf-8')
-        sql_string = fpo.readlines()
-    except Exception:
-        fpo = open(sql_file_path, 'r', encoding='gbk')
-        sql_string = fpo.readlines()
+        sql_file_name = sql_name
+        sql_file_path = os.path.join(sql_file_name)
 
-    for i in sql_string:
-        if '--' in i:
-            index = sql_string.index(i)
-            sql_string[index] = ""
-        else:
+        try:
+            fpo = open(sql_file_path, 'r', encoding='utf-8')
+            sql_string = fpo.readlines()
+        except Exception:
+            fpo = open(sql_file_path, 'r', encoding='gbk')
+            sql_string = fpo.readlines()
+
+        for i in sql_string:
+            if '--' in i:
+                index = sql_string.index(i)
+                sql_string[index] = ""
+            else:
+                pass
+        output_string = ''
+
+        try:
+            for ele in sql_string:
+                output_string += ele.replace('\n', ' ')
+        except Exception:
             pass
-    output_string = ''
+        finally:
+            fpo.close()
 
-    try:
-        for ele in sql_string:
-            output_string += ele.replace('\n', ' ')
-    except Exception:
-        pass
-    finally:
-        fpo.close()
+        if not need_chinese:
+            # 将sql中的中文替换成''
+            output_string = re.sub(r'[\u4e00-\u9fa5]', '', output_string)
+            # 将sql中的中文字符替换成''
+            output_string = re.sub(r'[^\x00-\x7f]', '', output_string)
 
-    if not need_chinese:
-        # 将sql中的中文替换成''
-        output_string = re.sub(r'[\u4e00-\u9fa5]', '', output_string)
-        # 将sql中的中文字符替换成''
-        output_string = re.sub(r'[^\x00-\x7f]', '', output_string)
+        list_ = output_string.split(";")
+        for i in list_:
+            if i.strip() == '':
+                list_.remove(i)
 
-    list_ = output_string.split(";")
-    for i in list_:
-        if i.strip() == '':
-            list_.remove(i)
+        return list_
+    except Exception as e:
+       print("exec throw a exception " + str(e))
 
-    return list_
+

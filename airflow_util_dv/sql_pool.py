@@ -113,12 +113,16 @@ def is_monthend():
     is or not monthend
     :return:
     """
-    date = v_date
-    print(date)
-    if date == get_firstday_of_month():
-        return "is_month_end"
-    else:
-        return "not_month_end"
+    try:
+        now_date = datetime.datetime.now().strftime('%Y-%m-%d')
+        date = now_date
+        if date == get_firstday_of_month():
+            return "is_month_end"
+        else:
+            return "not_month_end"
+    except Exception as e:
+        print(e)
+        raise RuntimeError(e)
 
 
 @deprecated(version='1.2.5', reason="Return Sql is too big, use modify_sql in later version.")
