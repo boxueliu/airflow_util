@@ -22,16 +22,19 @@ class AirflowUtil:
         self.flag = ''
 
     def flag_creat(self, **kwargs):
-        file_path = kwargs['file_path']
-        file_suffix = datetime.datetime.now().strftime('%Y%m%d')
-        r"""
-         cbb system to create success file flag
-        :param file_path:
-        :return:
-        """
-        flag_name = 'interface_' + file_suffix + '.flag'
-        with open(os.path.join(file_path, flag_name), 'w') as file:
-            file.write('')
+        try:
+            file_path = kwargs['file_path']
+            file_suffix = datetime.datetime.now().strftime('%Y%m%d')
+            r"""
+             cbb system to create success file flag
+            :param file_path:
+            :return:
+            """
+            flag_name = 'interface_' + file_suffix + '.flag'
+            with open(os.path.join(file_path, flag_name), 'w') as file:
+                file.write('')
+        except Exception as e:
+            raise Exception("文件生成异常", str(e))
 
     def get_cut_time(self, system_type, taskid, conn):
         r"""
@@ -105,7 +108,6 @@ class AirflowUtil:
             notes_ = 0
             try:
                 if file_ == sql_name:
-
                     sql_dic = self.sql_parse(spool_path + sql_name)
                     sql_ = sql_dic['sql']
                     file_name = sql_dic['file'].replace('\n', '')
@@ -124,11 +126,13 @@ class AirflowUtil:
                     except Exception as ee:
                         print(ee)
 
+                    # 根据系统类型去导出文件为utf-8 或者gbk文件
                     if data_type == "ODSB_CBB":
                         f = open(os.path.join(data_path, file_name), 'w', encoding='utf8')
                     else:
                         f = open(os.path.join(data_path, file_name), 'w', encoding='gb18030')
                     while data_from < notes_:
+                        # 判断数据库类型
                         if database == 'MYSQL':
                             sql_prefix = ' limit %s, 1000000 ' % str(data_from)
                         _sql = sql_ + sql_prefix
@@ -151,6 +155,7 @@ class AirflowUtil:
                           ' 获得数据为：' + str(data_from) + ' 条 ===============')
                     print('==========落成文件 ' + file_name + ' 的数据条数：' + str(data_to) + ' 条 =================')
 
+                    # 查询ods 映射条数并进行校验是否正确
                     sql_retail = "SELECT COUNT(1) FROM "
                     if file_name.find('ARCH') >= 0:
                         schema = 'DMT_ADMIN'
@@ -158,8 +163,8 @@ class AirflowUtil:
                         schema = 'ODSB_ADMIN'
                     else:
                         schema = 'K_ODS'
-
                     sql = sql_retail + schema + '.' + file_name[:file_name.find('.csv')]
+
                     data_list = []
                     try:
                         ods_cursor = cx_Oracle.connect(ods_conn).cursor()
@@ -172,9 +177,67 @@ class AirflowUtil:
                         summary = data_list[0][0]
 
                     print('==============导入ods查询该表有 ' + str(summary) + ' 条====================')
-
+                    if summary == data_from:
+                        pass
+                    else:
+                        raise Exception("数据条数映射不正确,上游数据为：" + str(data_from) + "条，映射表中有有："+str(summary)+"条")
             except Exception as e:
-                raise RuntimeError(e)
+                raise Exception(str(e))
+
+    def data_export(self, **kwargs):
+        r"""
+        导入数据到表中，从csv到table
+        :param kwargs:
+        :return:
+        """
+        file_path = kwargs['file_path']
+        conn = kwargs['conn']
+        schema = kwargs['schema']
+        table_name = kwargs['table_name']
+        try:
+            if not os.path.exists(file_path):
+                raise Exception("文件不存在")
+            else:
+                connect = cx_Oracle.connect(conn, encoding='gb18030')
+                cursor = connect.cursor()
+                with open(file_path, 'r', encoding='gb18030') as f:
+                    list_ = f.readlines()
+                    sql = 'INSERT ALL '
+                    sql_suffix = ' SELECT 1 FROM DUAL '
+                    for i in list_:
+                        i = i.replace('\n', '')
+                        a = i.split('<>')
+                        sql1 = ' INTO '+str(schema)+'.'+str(table_name)+' VALUES ' + str(tuple(a))
+                        sql += sql1
+                    sql += sql_suffix
+                cursor.execute(sql)
+                connect.commit()
+                print(sql)
+        except Exception as e:
+            raise Exception("导入数据出错", str(e))
+
+    def data_analysis(self, schema, table_name, ods_conn):
+        r"""
+        data anlysis
+        :param schema:
+        :param table_name:
+        :param ods_conn:
+        :return:
+        """
+        sql = ''
+        try:
+            if schema & table_name:
+                sql = "SELECT COUNT(1) FROM " + schema + '.' + table_name
+            ods_cursor = cx_Oracle.connect(ods_conn).cursor()
+            ods_cursor.execute(sql)
+            data_list = ods_cursor.fetchall()
+            summary = 0
+            if data_list:
+                summary = data_list[0][0]
+
+            print('==============导入ods查询该表有 ' + str(summary) + ' 条====================')
+        except Exception as e:
+            print(e)
 
     def mysql_connect(self, conn):
         r"""
@@ -182,18 +245,22 @@ class AirflowUtil:
         :param conn:
         :return:
         """
-        user = conn[:str(conn).find('/')]
-        pwd = conn[str(conn).find('/') + 1:str(conn).find('@')]
+        try:
+            user = conn[:str(conn).find('/')]
+            pwd = conn[str(conn).find('/') + 1:str(conn).find('@')]
 
-        if conn.find(':') >= 0:
-            host = conn[str(conn).find('@') + 1:str(conn).find(':')]
-            port = int(conn[str(conn).find(':') + 1:str(conn).rfind('/')])
-        else:
-            host = conn[str(conn).find('@') + 1:str(conn).rfind('/')]
-            port = 3306
-        db = conn[str(conn).rfind('/') + 1:]
-        conn = MySQLdb.connect(host, user, pwd, db, port, charset='utf8')
-        return conn
+            if conn.find(':') >= 0:
+                host = conn[str(conn).find('@') + 1:str(conn).find(':')]
+                port = int(conn[str(conn).find(':') + 1:str(conn).rfind('/')])
+            else:
+                host = conn[str(conn).find('@') + 1:str(conn).rfind('/')]
+                port = 3306
+            db = conn[str(conn).rfind('/') + 1:]
+            conn = MySQLdb.connect(host, user, pwd, db, port, charset='utf8')
+            return conn
+
+        except Exception as e:
+            raise Exception("mysql数据库连接异常", str(e))
 
     def sql_parse(self, file_name):
         r"""
@@ -201,21 +268,24 @@ class AirflowUtil:
         :param file_name:
         :return:
         """
-        _file = 0
-        _sql = 0
-        _file_str = ''
-        _sql_str = ''
+        try:
+            _file = 0
+            _sql = 0
+            _file_str = ''
+            _sql_str = ''
 
-        with open(file_name, 'r') as fp:
-            for line in fp:
-                if line.strip().find('file:') == 0:
-                    _file = 1
-                    _sql = 0
-                elif line.strip().find('sql:') == 0:
-                    _sql = 1
-                    _file = 0
-                elif _file == 1:
-                    _file_str = line
-                elif _sql == 1:
-                    _sql_str += line
-        return {"file": _file_str, "sql": _sql_str}
+            with open(file_name, 'r') as fp:
+                for line in fp:
+                    if line.strip().find('file:') == 0:
+                        _file = 1
+                        _sql = 0
+                    elif line.strip().find('sql:') == 0:
+                        _sql = 1
+                        _file = 0
+                    elif _file == 1:
+                        _file_str = line
+                    elif _sql == 1:
+                        _sql_str += line
+            return {"file": _file_str, "sql": _sql_str}
+        except Exception as e:
+            raise Exception("文件解析异常", str(e))
