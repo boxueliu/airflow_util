@@ -5,7 +5,9 @@ version: 0.1.0
 description: airflow analysis sql and create file
 """
 import datetime
+import linecache
 import os
+import psycopg2
 import time
 
 import MySQLdb
@@ -111,6 +113,7 @@ class AirflowUtil:
                     sql_dic = self.sql_parse(spool_path + sql_name)
                     sql_ = sql_dic['sql']
                     file_name = sql_dic['file'].replace('\n', '')
+                    table_ = sql_dic['table'].replace('\n', '')
 
                     if sql_.find('&2') != -1:
                         sql_ = sql_.replace('&2', daily_start_time)
@@ -156,31 +159,10 @@ class AirflowUtil:
                     print('==========落成文件 ' + file_name + ' 的数据条数：' + str(data_to) + ' 条 =================')
 
                     # 查询ods 映射条数并进行校验是否正确
-                    sql_retail = "SELECT COUNT(1) FROM "
-                    if file_name.find('ARCH') >= 0:
-                        schema = 'DMT_ADMIN'
-                    elif file_name.find('ODSB') >= 0:
-                        schema = 'ODSB_ADMIN'
+                    if not ods_conn == '':
+                        self.data_analysis(table_, ods_conn, notes_)
                     else:
-                        schema = 'K_ODS'
-                    sql = sql_retail + schema + '.' + file_name[:file_name.find('.csv')]
-
-                    data_list = []
-                    try:
-                        ods_cursor = cx_Oracle.connect(ods_conn).cursor()
-                        ods_cursor.execute(sql)
-                        data_list = ods_cursor.fetchall()
-                    except Exception as e:
-                        print(e)
-                    summary = 0
-                    if data_list:
-                        summary = data_list[0][0]
-
-                    print('==============导入ods查询该表有 ' + str(summary) + ' 条====================')
-                    if summary == data_from:
                         pass
-                    else:
-                        raise Exception("数据条数映射不正确,上游数据为：" + str(data_from) + "条，映射表中有有："+str(summary)+"条")
             except Exception as e:
                 raise Exception(str(e))
 
@@ -216,31 +198,34 @@ class AirflowUtil:
         except Exception as e:
             raise Exception("导入数据出错", str(e))
 
-    def data_analysis(self, schema, table_name, ods_conn):
+    def data_analysis(self, table_name, ods_conn, up_num):
         r"""
-        data anlysis
-        :param schema:
-        :param table_name:
-        :param ods_conn:
+        data anlysis，判断表中数据条数是否映射正确
+        :param table_name:表名，格式：schema.表名
+        :param ods_conn:数据库连接参数
         :return:
         """
         sql = ''
         try:
-            if schema & table_name:
-                sql = "SELECT COUNT(1) FROM " + schema + '.' + table_name
+            if table_name:
+                sql = "SELECT COUNT(1) FROM " + table_name
             ods_cursor = cx_Oracle.connect(ods_conn).cursor()
             ods_cursor.execute(sql)
             data_list = ods_cursor.fetchall()
             summary = 0
             if data_list:
                 summary = data_list[0][0]
-
+                if summary == up_num:
+                    pass
+                else:
+                    raise Exception("数据条数映射不正确,上游数据为：" + str(up_num) + "条，映射表中有有："+str(summary)+"条")
             print('==============导入ods查询该表有 ' + str(summary) + ' 条====================')
         except Exception as e:
-            print(e)
+            raise e
 
     def mysql_connect(self, conn):
         r"""
+        该方法用于连接数据参数
         mysql connect
         :param conn:
         :return:
@@ -262,6 +247,29 @@ class AirflowUtil:
         except Exception as e:
             raise Exception("mysql数据库连接异常", str(e))
 
+    def postgre_connect(self, conn):
+        r"""
+        该方法用于连接postgres 数据库
+        :param conn: 传递数据库连接参数，格式：password/user@host:port/database
+        :return:
+        """
+        try:
+            user = conn[:str(conn).find('/')]
+            pwd = conn[str(conn).find('/') + 1:str(conn).find('@')]
+
+            if conn.find(':') >= 0:
+                host = conn[str(conn).find('@') + 1:str(conn).find(':')]
+                port = int(conn[str(conn).find(':') + 1:str(conn).rfind('/')])
+            else:
+                host = conn[str(conn).find('@') + 1:str(conn).rfind('/')]
+                port = 5432
+            db = conn[str(conn).rfind('/') + 1:]
+            conn = psycopg2.connect(database=db,  user=user, password=pwd, host=host, port=port)
+            return conn
+
+        except Exception as e:
+            raise Exception("mysql数据库连接异常", str(e))
+
     def sql_parse(self, file_name):
         r"""
         解析sql
@@ -271,21 +279,85 @@ class AirflowUtil:
         try:
             _file = 0
             _sql = 0
+            _table = 0
             _file_str = ''
             _sql_str = ''
+            _table_str = ''
 
             with open(file_name, 'r') as fp:
                 for line in fp:
                     if line.strip().find('file:') == 0:
                         _file = 1
                         _sql = 0
+                        _table = 0
                     elif line.strip().find('sql:') == 0:
                         _sql = 1
                         _file = 0
+                        _table = 0
+                    elif line.strip().find('table:') == 0:
+                        _table = 1
+                        _sql = 0
+                        _file = 0
                     elif _file == 1:
                         _file_str = line
+                    elif _table == 1:
+                        _table_str += line
                     elif _sql == 1:
                         _sql_str += line
-            return {"file": _file_str, "sql": _sql_str}
+
+            return {"file": _file_str, "table": _table_str, "sql": _sql_str}
+
         except Exception as e:
             raise Exception("文件解析异常", str(e))
+
+    def get_email_msg(self, _type, airflow_conn, ods_conn, ods_sql, dag_id, task_id):
+        r"""
+        获取email 邮件的一些信息
+        :param _type:
+        :param airflow_conn:airflow的数据库连接，格式：password/user@host:port/database
+        :param ods_conn: ods的数据库连接
+        :param ods_sql: 要去查询的sql
+        :param dag_id: 具体哪个调度的dag id
+        :param task_id: 具体的task的名称
+        :return:
+        """
+        try:
+            start_date = ''
+            start_task = ''
+            sap_zup_data = ''
+            sap_fag_data = ''
+
+            if _type == 'mysql':
+                connect = self.mysql_connect(airflow_conn)
+                airflow_sql = "select date_add(start_date,INTERVAL -8 hour )  from task_instance  where dag_id = '%s' " \
+                              "and task_id = '%s' and state = 'success' order by  execution_date desc limit 1" \
+                              % (dag_id, task_id)
+                cursor = connect.cursor()
+                cursor.execute(airflow_sql)
+                start_task = cursor.fetchall()
+            elif _type == 'pg':
+                connect = self.postgre_connect(airflow_conn)
+                airflow_sql = "select start_date + INTERVAL '+8 hour'  from airflow.public.task_instance " \
+                              " where dag_id = '%s' and task_id = '%s' order by  execution_date desc limit 1"\
+                              % (dag_id, task_id)
+                cursor = connect.cursor()
+                cursor.execute(airflow_sql)
+                start_task = cursor.fetchall()
+            if not ods_conn == '':
+                oracle_conn = cx_Oracle.connect(ods_conn)
+                oracle_cursor = oracle_conn.cursor()
+                sql = ods_sql
+                oracle_cursor.execute(sql)
+                oracle_conn.commit()
+                data = oracle_cursor.fetchall()
+                if len(data) > 0:
+                    sap_zup_data = str(data[0][0] / 1000)
+                    sap_fag_data = str(data[1][0] / 1000)
+                else:
+                    sap_zup_data = 0
+                    sap_fag_data = 0
+            if len(start_task) > 0:
+                start_date = str(start_task[0][0])
+            return start_date, sap_zup_data, sap_fag_data
+        except Exception as e:
+            raise Exception("程序处理异常", e)
