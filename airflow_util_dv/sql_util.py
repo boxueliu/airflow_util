@@ -7,10 +7,13 @@ description: airflow analysis sql and create file
 import datetime
 import linecache
 import os
+import subprocess
+
+import MySQLdb
 import psycopg2
 import time
 
-import MySQLdb
+# import MySQLdb
 import cx_Oracle
 import traceback2 as traceback
 
@@ -65,7 +68,7 @@ class AirflowUtil:
 
     def spool_csv(self, **kwargs):
         r"""
-        to analysis sql file and create csv file to export data
+        上游数据落成csv文件
         :param kwargs:
         :return: csv file
         dataype must be attentionai
@@ -79,10 +82,7 @@ class AirflowUtil:
         daily_conn = kwargs['daily_conn']
         system_type = kwargs['system_type']
         database = kwargs['database']
-        if kwargs['ods_conn']:
-            ods_conn = kwargs['ods_conn']
-        else:
-            ods_conn = ''
+
         """
             get daily time
         """
@@ -98,7 +98,6 @@ class AirflowUtil:
             daily_start_time, daily_end_time = self.get_cut_time(system_type, data_type, daily_conn)
 
         cursor = connect.cursor()
-        cursor1 = cursor
         sql_prefix = ''
 
         """     
@@ -107,62 +106,52 @@ class AirflowUtil:
         for file_ in os.listdir(spool_path):
             data_from = 0
             data_to = 0
-            notes_ = 0
             try:
                 if file_ == sql_name:
                     sql_dic = self.sql_parse(spool_path + sql_name)
                     sql_ = sql_dic['sql']
                     file_name = sql_dic['file'].replace('\n', '')
-                    table_ = sql_dic['table'].replace('\n', '')
-
                     if sql_.find('&2') != -1:
                         sql_ = sql_.replace('&2', daily_start_time)
                     if sql_.find('&3') != -1:
                         sql_ = sql_.replace('&3', daily_end_time)
                     sql_ = sql_.replace(';', '').replace('select', 'SELECT').replace('from', 'FROM')
-                    count_sql = sql_.replace(sql_[sql_.index('SELECT') + 6:sql_.index('FROM')], '  count(1) ')
-
-                    try:
-                        cursor1.execute(count_sql)
-                        notes_ = cursor1.fetchall()[0][0]
-                        print("上游数据总条数为：" + str(notes_) + " 条")
-                    except Exception as ee:
-                        print(ee)
 
                     # 根据系统类型去导出文件为utf-8 或者gbk文件
                     if data_type == "ODSB_CBB":
                         f = open(os.path.join(data_path, file_name), 'w', encoding='utf8')
                     else:
                         f = open(os.path.join(data_path, file_name), 'w', encoding='gb18030')
-                    while data_from < notes_:
-                        # 判断数据库类型
-                        if database == 'MYSQL':
-                            sql_prefix = ' limit %s, 1000000 ' % str(data_from)
-                        _sql = sql_ + sql_prefix
-                        print(_sql)
-                        cursor.execute(_sql)
-                        while True:
-                            data = cursor.fetchmany(1000)
-                            data_from += len(data)
-                            if data:
-                                for x in data:
-                                    f.write(x[0])
-                                    f.write('\n')
-                                    data_to += 1
-                            else:
-                                break
+                    # 判断数据库类型
+                    if database == 'MYSQL':
+                        sql_prefix = ' limit %s, 1000000 ' % str(data_from)
+                    _sql = sql_ + sql_prefix
+                    print(_sql)
+                    cursor.execute(_sql)
+                    while True:
+                        data = cursor.fetchmany(1000)
+                        data_from += len(data)
+                        if data:
+                            for x in data:
+                                f.write(x[0])
+                                f.write('\n')
+                                data_to += 1
+                        else:
+                            break
+
                     f.close()
                     cursor.close()
+                    if data_from == data_to:
+                        pass
+                    else:
+                        raise Exception("抽取的数据到csv数据不准确，抽取数据是： " + str(data_from) +
+                                        " 条，落成csv文本条数为： " + str(data_to) + " 条")
 
                     print('==========从上游抽数该表 ' + file_name[:file_name.find('.csv')] +
                           ' 获得数据为：' + str(data_from) + ' 条 ===============')
                     print('==========落成文件 ' + file_name + ' 的数据条数：' + str(data_to) + ' 条 =================')
-
-                    # 查询ods 映射条数并进行校验是否正确
-                    if not ods_conn == '':
-                        self.data_analysis(table_, ods_conn, notes_)
-                    else:
-                        pass
+                else:
+                    pass
             except Exception as e:
                 raise Exception(str(e))
 
@@ -222,6 +211,33 @@ class AirflowUtil:
             print('==============导入ods查询该表有 ' + str(summary) + ' 条====================')
         except Exception as e:
             raise e
+
+    def data_check(self, **kwargs):
+        r"""
+        检查csv到ods外部表是否准确
+        :param kwargs:
+        :return:
+        """
+        spool_path = kwargs['spool_path']
+        data_path = kwargs['data_path']
+        sql_name = kwargs['sql_name']
+        if kwargs['ods_conn']:
+            ods_conn = kwargs['ods_conn']
+        else:
+            ods_conn = ''
+        if not ods_conn == '':
+            if os.path.exists(spool_path + sql_name):
+                sql_dic = self.sql_parse(spool_path + sql_name)
+                table_name = sql_dic['table']
+                file_name = data_path + sql_dic['file']
+                output = subprocess.getoutput('wc -l ' + str(file_name))
+                num_up = int(str(output).strip().split(' ')[0])
+                print("==============上游数据条数： " + str(num_up) + ' 条====================')
+                self.data_analysis(table_name, ods_conn, num_up)
+            else:
+                raise Exception(str(spool_path + sql_name) + " csv文件不存在")
+        else:
+            pass
 
     def mysql_connect(self, conn):
         r"""
@@ -329,7 +345,8 @@ class AirflowUtil:
 
             if _type == 'mysql':
                 connect = self.mysql_connect(airflow_conn)
-                airflow_sql = "select date_add(start_date,INTERVAL -8 hour )  from task_instance  where dag_id = '%s' " \
+                airflow_sql = "select date_add(start_date,INTERVAL -8 hour ) , date_add(end_date,INTERVAL -8 hour ) " \
+                              "  from task_instance  where dag_id = '%s' " \
                               "and task_id = '%s' and state = 'success' order by  execution_date desc limit 1" \
                               % (dag_id, task_id)
                 cursor = connect.cursor()
@@ -337,9 +354,9 @@ class AirflowUtil:
                 start_task = cursor.fetchall()
             elif _type == 'pg':
                 connect = self.postgre_connect(airflow_conn)
-                airflow_sql = "select start_date + INTERVAL '+8 hour'  from airflow.public.task_instance " \
-                              " where dag_id = '%s' and task_id = '%s' order by  execution_date desc limit 1"\
-                              % (dag_id, task_id)
+                airflow_sql = "select start_date + INTERVAL '+8 hour',end_date + INTERVAL '+8 hour' from " \
+                              "airflow.public.task_instance  where dag_id = '%s' and task_id = '%s' " \
+                              "order by  execution_date desc limit 1" % (dag_id, task_id)
                 cursor = connect.cursor()
                 cursor.execute(airflow_sql)
                 start_task = cursor.fetchall()
