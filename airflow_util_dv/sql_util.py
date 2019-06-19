@@ -15,6 +15,7 @@ import time
 
 # import MySQLdb
 import cx_Oracle
+import pymysql
 import traceback2 as traceback
 
 
@@ -122,10 +123,7 @@ class AirflowUtil:
                         f = open(os.path.join(data_path, file_name), 'w', encoding='utf8')
                     else:
                         f = open(os.path.join(data_path, file_name), 'w', encoding='gb18030')
-                    # 判断数据库类型
-                    if database == 'MYSQL':
-                        sql_prefix = ' limit %s, 1000000 ' % str(data_from)
-                    _sql = sql_ + sql_prefix
+                    _sql = sql_
                     print(_sql)
                     cursor.execute(_sql)
                     while True:
@@ -138,7 +136,6 @@ class AirflowUtil:
                                 data_to += 1
                         else:
                             break
-
                     f.close()
                     cursor.close()
                     if data_from == data_to:
@@ -257,7 +254,8 @@ class AirflowUtil:
                 host = conn[str(conn).find('@') + 1:str(conn).rfind('/')]
                 port = 3306
             db = conn[str(conn).rfind('/') + 1:]
-            conn = MySQLdb.connect(host, user, pwd, db, port, charset='utf8')
+            conn = pymysql.connect(host=host, port=port, user=user, password=pwd, database=db,
+                                   cursorclass=pymysql.cursors.SSCursor)
             return conn
 
         except Exception as e:
@@ -345,8 +343,9 @@ class AirflowUtil:
 
             if _type == 'mysql':
                 connect = self.mysql_connect(airflow_conn)
-                airflow_sql = "select date_add(start_date,INTERVAL -8 hour ) , date_add(end_date,INTERVAL -8 hour ) " \
-                              "  from task_instance  where dag_id = '%s' " \
+                airflow_sql = "select date_format(date_add(start_date,INTERVAL -8 hour ),'%Y-%m-%d %H:%k:%i') " \
+                              ", date_format(date_add(end_date,INTERVAL -8 hour ),'%Y-%m-%d %H:%k:%i') " \
+                              " from task_instance  where dag_id = '%s' " \
                               "and task_id = '%s' and state = 'success' order by  execution_date desc limit 1" \
                               % (dag_id, task_id)
                 cursor = connect.cursor()
@@ -354,7 +353,8 @@ class AirflowUtil:
                 start_task = cursor.fetchall()
             elif _type == 'pg':
                 connect = self.postgre_connect(airflow_conn)
-                airflow_sql = "select start_date + INTERVAL '+8 hour',end_date + INTERVAL '+8 hour' from " \
+                airflow_sql = "select to_char(start_date,'YYYY-MM-DD hh24:mi:ss')," \
+                              "to_char(end_date ,'YYYY-MM-DD hh24:mi:ss') from " \
                               "airflow.public.task_instance  where dag_id = '%s' and task_id = '%s' " \
                               "order by  execution_date desc limit 1" % (dag_id, task_id)
                 cursor = connect.cursor()
