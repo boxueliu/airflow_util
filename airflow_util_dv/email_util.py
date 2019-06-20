@@ -1,3 +1,4 @@
+import time
 from email.mime.text import MIMEText
 import logging
 import traceback
@@ -36,6 +37,8 @@ class send_mail():
         messages_list = kwargs['messages']
         to_addr = [email.replace('\n', '') for email in mail_address.split(',')]
         list_ = ''
+        retry_num = 0
+        loop = True
         for i in messages_list:
             list_ += i + '<br>'
         messages += list_
@@ -47,20 +50,28 @@ class send_mail():
         msg['From'] = from_addr
         msg['To'] = ','.join(to_addr)
         msg['Subject'] = title
-        # 连接服务器发送邮件
-        try:
-            server = smtplib.SMTP(smtp_server, smtp_port)
-            server.connect(smtp_server, 587)
-            server.ehlo()
-            if is_tls == 'True':
-                server.starttls()
-            server.set_debuglevel(1)
-            server.login(from_addr, password)
-            server.sendmail(from_addr, to_addr, msg.as_string())
-            server.quit()
-            logging.info('*' * 20)
-            logging.info('Warning mail send succeeded!!!')
-            logging.info('*' * 20)
-        except Exception:
-            logging.error("Error %s", traceback.format_exc())
+        while loop:
+            # 发邮件连续发三次，如果超过三次就报异常信息
+            if retry_num > 2:
+                raise Exception("邮件连接失败")
+            # 连接服务器发送邮件
+            try:
+                server = smtplib.SMTP(smtp_server, smtp_port)
+                server.connect(smtp_server, 587)
+                server.ehlo()
+                if is_tls:
+                    server.starttls()
+                server.set_debuglevel(1)
+                server.login(from_addr, password)
+                server.sendmail(from_addr, to_addr, msg.as_string())
+                server.quit()
+                logging.info('Email send succeeded!!!')
+                loop = False
+                retry_num += 1
+            except Exception:
+                logging.error("Error %s", traceback.format_exc())
+                time.sleep(10)
+                loop = True
+                retry_num += 1
+                logging.warn("retry num "+str(retry_num))
 

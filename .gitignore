@@ -1,1 +1,10 @@
 .idea/
+airflow_util_dv.egg-info/
+build/
+dist/
+venv/
+.DS_Store
+test/
+README.md
+create_table.py
+LICENSE
