@@ -5,21 +5,11 @@ version: 0.1.0
 description: airflow analysis sql and create file
 """
 import datetime
-import linecache
 import os
 import subprocess
-
-import MySQLdb
 import psycopg2
-import time
-
-# import MySQLdb
 import cx_Oracle
 import pymysql
-import traceback2 as traceback
-
-
-# import MySQLdb
 
 
 class AirflowUtil:
