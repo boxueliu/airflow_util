@@ -55,10 +55,12 @@ class AirflowUtil:
             else:
                 connnection = cx_Oracle.connect(conn)
                 cursor = connnection.cursor()
-                sql = "SELECT TO_CHAR(LAST_FIN_DAILY_DATE,'YYYY-MM-DD HH24:MI:SS')," \
-                      "TO_CHAR(THIS_FIN_DAILY_DATE,'YYYY-MM-DD HH24:MI:SS') " \
-                      "FROM K_ODS.FIN_DAILY_TABLE  " \
-                      " WHERE SYSTEM_ID = '%s'  AND TASK_ID = '%s'   AND EFF_FLAG = '1'" \
+                sql = "SELECT START_DATE,END_DATE FROM (" \
+                      " SELECT TO_CHAR(LAST_FIN_DAILY_DATE, 'YYYY-MM-DD HH24:MI:SS')   START_DATE" \
+                      " , TO_CHAR(THIS_FIN_DAILY_DATE, 'YYYY-MM-DD HH24:MI:SS')  END_DATE  " \
+                      ",ROW_NUMBER()OVER(PARTITION BY SYSTEM_ID,TASK_ID ORDER BY LAST_FIN_DAILY_DATE DESC) NN " \
+                      "FROM K_ODS.FIN_DAILY_TABLE     WHERE SYSTEM_ID = '%s'  " \
+                      " AND TASK_ID = '%s'   AND EFF_FLAG = '1'  ) WHERE NN =1" \
                       % (str(system_type), str(taskid))
                 cursor.execute(sql)
                 connnection.commit()
