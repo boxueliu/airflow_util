@@ -335,8 +335,8 @@ class AirflowUtil:
 
             if _type == 'mysql':
                 connect = self.mysql_connect(airflow_conn)
-                airflow_sql = "select date_format(date_add(start_date,INTERVAL -8 hour ),'%Y-%m-%d %H:%k:%i') " \
-                              ", date_format(date_add(end_date,INTERVAL -8 hour ),'%Y-%m-%d %H:%k:%i') " \
+                airflow_sql = "select date_format(date_add(start_date,INTERVAL -8 hour ),'%%Y-%%m-%%d %%H:%%i:%%i') " \
+                              ", date_format(date_add(end_date,INTERVAL -8 hour ),'%%Y-%%m-%%d %%H:%%i:%%i') " \
                               " from task_instance  where dag_id = '%s' " \
                               "and task_id = '%s' and state = 'success' order by  execution_date desc limit 1" \
                               % (dag_id, task_id)
