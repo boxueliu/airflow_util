@@ -278,11 +278,12 @@ def return_sql(sql_name, need_chinese=True):
         except Exception:
             fpo = open(sql_file_path, 'r', encoding='gbk')
             sql_string = fpo.readlines()
-
         for i in sql_string:
             if '--' in i:
                 index = sql_string.index(i)
-                sql_string[index] = ""
+                new = i[i.index("--"):i.index("\n")]
+                i = i.replace(new, "")
+                sql_string[index] = i
             else:
                 pass
         output_string = ''
