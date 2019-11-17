@@ -237,13 +237,13 @@ class AirflowUtil:
         """
         try:
             user = conn[:str(conn).find('/')]
-            pwd = conn[str(conn).find('/') + 1:str(conn).find('@')]
+            pwd = conn[str(conn).find('/') + 1:str(conn).rfind('@')]
 
             if conn.find(':') >= 0:
-                host = conn[str(conn).find('@') + 1:str(conn).find(':')]
+                host = conn[str(conn).rfind('@') + 1:str(conn).find(':')]
                 port = int(conn[str(conn).find(':') + 1:str(conn).rfind('/')])
             else:
-                host = conn[str(conn).find('@') + 1:str(conn).rfind('/')]
+                host = conn[str(conn).rfind('@') + 1:str(conn).rfind('/')]
                 port = 3306
             db = conn[str(conn).rfind('/') + 1:]
             conn = pymysql.connect(host=host, port=port, user=user, password=pwd, database=db,
@@ -261,13 +261,13 @@ class AirflowUtil:
         """
         try:
             user = conn[:str(conn).find('/')]
-            pwd = conn[str(conn).find('/') + 1:str(conn).find('@')]
+            pwd = conn[str(conn).find('/') + 1:str(conn).rfind('@')]
 
             if conn.find(':') >= 0:
-                host = conn[str(conn).find('@') + 1:str(conn).find(':')]
+                host = conn[str(conn).rfind('@') + 1:str(conn).find(':')]
                 port = int(conn[str(conn).find(':') + 1:str(conn).rfind('/')])
             else:
-                host = conn[str(conn).find('@') + 1:str(conn).rfind('/')]
+                host = conn[str(conn).rfind('@') + 1:str(conn).rfind('/')]
                 port = 5432
             db = conn[str(conn).rfind('/') + 1:]
             conn = psycopg2.connect(database=db,  user=user, password=pwd, host=host, port=port)

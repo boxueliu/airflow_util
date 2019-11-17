@@ -6,7 +6,7 @@ import sys
 
 setup(
     name="airflow_util_dv",
-    version="1.5.5.2.2",
+    version="1.6.1",
     author="boxue liu",
     author_email="liu.boxue@detvista.com",
     license="Apache License",
