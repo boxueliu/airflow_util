@@ -12,7 +12,7 @@ setup(
     license="Apache License",
     url="https://github.com/boxueliu/airflow_util",
     packages=["airflow_util_dv"],
-    install_requires=["cx_Oracle <= 7.1.2 ", "traceback2 <= 1.4.0", "apache-airflow == 1.10.1", "configparser ==3.5.3"],
+    install_requires=["cx_Oracle <= 7.1.2 ", "traceback2 <= 1.4.0", "apache-airflow == 1.10.14", "configparser ==3.5.3"],
     classifiers=[
         "Environment :: Web Environment",
         "Intended Audience :: Developers",
